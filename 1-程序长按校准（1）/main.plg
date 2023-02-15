@@ -1,0 +1,17 @@
+<html>
+<body>
+<pre>
+<h1>礦ision Build Log</h1>
+<h2>Project:</h2>
+Z:\110-基于单片机电子秤设计\1102-电子称（1602简化版）\1-程序长按校准\main.uvproj
+Project File Date:  09/23/2015
+
+<h2>Output:</h2>
+Build target 'Target 1'
+compiling main.c...
+compiling LCD1602.c...
+compiling HX711.c...
+linking...
+Program Size: data=38.3 xdata=0 code=2450
+creating hex file from "main"...
+"main" - 0 Error(s), 0 Warning(s).

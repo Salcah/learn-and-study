@@ -1,0 +1,406 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              07/12/2022 09:28:22 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: E:\study\Keil C51\anzhuang\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(
+                    -2)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <intrins.h>
+   3          #include <string.h>
+   4          #include "main.h"
+   5          #include "LCD1602.h"
+   6          #include "HX711.h"
+   7          #include "eeprom52.h"
+   8          
+   9          #define uchar unsigned char
+  10          #define uint  unsigned int
+  11            //=============================
+  12            sbit F_close = P2^0;////Funnel switch
+  13            sbit F_open = P2^2;////Funnel switch
+  14            sbit Conveyor_belt = P2^1;//Conveyor_belt
+  15            long Weight_touwei = 1000;
+  16            short flag;
+  17            //==============================
+  18          
+  19          
+  20          ////=============================================
+  21          unsigned long HX711_Buffer = 0;
+  22          unsigned long Weight_Maopi = 0;
+  23          unsigned long Weight_Maopi_0 = 0;
+  24          long Weight_Shiwu = 0;
+  25          unsigned int qupi=0;
+  26          //º¸≈Ã¥¶¿Ì±‰¡ø
+  27          unsigned char keycode;
+  28          unsigned char key_press_num=0;
+  29          uint GapValue,GapValue1;
+  30          
+  31          //∂®“Â±Í ∂
+  32          volatile bit FlagTest = 0;    //∂® ±≤‚ ‘±Í÷æ£¨√ø0.5√Î÷√Œª£¨≤‚ÕÍ«Â0
+  33          volatile bit FlagKeyPress = 0;  //”–º¸∞¥œ¬±Í÷æ£¨¥¶¿ÌÕÍ±œ«Â0
+  34          //–£◊º≤Œ ˝
+  35          //“ÚŒ™≤ªÕ¨µƒ¥´∏–∆˜Ãÿ–‘«˙œﬂ≤ª «∫‹“ª÷¬£¨“Ú¥À£¨√ø“ª∏ˆ¥´∏–∆˜–Ë“™Ω√’˝’‚¿Ô’‚∏ˆ≤Œ ˝≤≈ƒ‹ π≤‚¡ø÷µ∫‹◊º»∑°£
+  36          //µ±∑¢œ÷≤‚ ‘≥ˆ¿¥µƒ÷ÿ¡ø∆´¥Û ±£¨‘ˆº”∏√ ˝÷µ°£
+  37          //»Áπ˚≤‚ ‘≥ˆ¿¥µƒ÷ÿ¡ø∆´–° ±£¨ºı–°∏ƒ ˝÷µ°£
+  38          //∏√÷µø…“‘Œ™–° ˝
+  39          //#define GapValue 349
+  40          ////sbit LED=P1^1;
+  41          short LED;
+  42          
+  43          ////sbit ROW1=P1^0;
+  44          sbit ROW1=P3^1;
+  45          ////sbit ROW2=P1^1;
+  46          sbit ROW2=P3^0;
+  47          ////sbit ROW3=P1^2;
+  48          sbit ROW3=P3^2;
+  49          ////sbit ROW4=P1^3;
+  50          sbit ROW4=P3^3;
+  51          
+  52          volatile bit ClearWeighFlag = 0; //¥´∏–∆˜µ˜¡„±Í÷æŒª£¨«Â≥˝0∆Ø
+  53          
+  54          /******************∞— ˝æ›±£¥ÊµΩµ•∆¨ª˙ƒ⁄≤øeeprom÷–******************/
+C51 COMPILER V9.60.0.0   MAIN                                                              07/12/2022 09:28:22 PAGE 2   
+
+  55          void write_eeprom()
+  56          {
+  57   1        SectorErase(0x2000);
+  58   1        GapValue1=GapValue&0x00ff;
+  59   1        byte_write(0x2000, GapValue1);
+  60   1        GapValue1=(GapValue&0xff00)>>8;
+  61   1        byte_write(0x2001, GapValue1);
+  62   1        byte_write(0x2060, a_a);  
+  63   1      }
+  64          
+  65          /******************∞— ˝æ›¥”µ•∆¨ª˙ƒ⁄≤øeeprom÷–∂¡≥ˆ¿¥*****************/
+  66          void read_eeprom()
+  67          {
+  68   1        GapValue   = byte_read(0x2001);
+  69   1        GapValue   = (GapValue<<8)|byte_read(0x2000);
+  70   1        a_a      = byte_read(0x2060);
+  71   1      }
+  72          
+  73          /**************ø™ª˙◊‘ºÏeeprom≥ı ºªØ*****************/
+  74          void init_eeprom() 
+  75          {
+  76   1        read_eeprom();    //œ»∂¡
+  77   1        if(a_a != 1)    //–¬µƒµ•∆¨ª˙≥ı ºµ•∆¨ª˙ƒ⁄Œ eeprom
+  78   1        {
+  79   2          GapValue  = 3500;
+  80   2          a_a = 1;
+  81   2          write_eeprom();    //±£¥Ê ˝æ›
+  82   2        } 
+  83   1      }
+  84          
+  85          //œ‘ æ÷ÿ¡ø£¨µ•Œªkg£¨¡ΩŒª’˚ ˝£¨»˝Œª–° ˝
+  86          void Display_Weight()
+  87          {
+  88   1        LCD1602_write_com(0x80+0x40+8);
+  89   1        if(Weight_Shiwu/10000==0)
+  90   1        LCD1602_write_data(' ');
+  91   1        else
+  92   1        LCD1602_write_data(Weight_Shiwu/10000 + 0x30);
+  93   1        LCD1602_write_data(Weight_Shiwu%10000/1000 + 0x30);
+  94   1        LCD1602_write_data('.');
+  95   1        LCD1602_write_data(Weight_Shiwu%1000/100 + 0x30);
+  96   1        LCD1602_write_data(Weight_Shiwu%100/10 + 0x30);
+  97   1        LCD1602_write_data(Weight_Shiwu%10 + 0x30);
+  98   1      }
+  99          
+ 100          //∂® ±∆˜0≥ı ºªØ
+ 101          void Timer0_Init()
+ 102          {
+ 103   1        ET0 = 1;        //‘ –Ì∂® ±∆˜0÷–∂œ
+ 104   1        TMOD = 1;       //∂® ±∆˜π§◊˜∑Ω Ω—°‘Ò
+ 105   1        TL0 = 0xb0;     
+ 106   1        TH0 = 0x3c;     //∂® ±∆˜∏≥”Ë≥ı÷µ
+ 107   1        TR0 = 1;        //∆Ù∂Ø∂® ±∆˜
+ 108   1      }
+ 109          
+ 110          //∂® ±∆˜0÷–∂œ
+ 111          void Timer0_ISR (void) interrupt 1 using 0
+ 112          {
+ 113   1        uchar Counter;
+ 114   1        TL0 = 0xb0;
+ 115   1        TH0 = 0x3c;     //∂® ±∆˜∏≥”Ë≥ı÷µ
+ 116   1      
+C51 COMPILER V9.60.0.0   MAIN                                                              07/12/2022 09:28:22 PAGE 3   
+
+ 117   1        //√ø0.5√Î÷”À¢–¬÷ÿ¡ø
+ 118   1          Counter ++;
+ 119   1          if (Counter >= 10)
+ 120   1          {
+ 121   2             FlagTest = 1;
+ 122   2           Counter = 0;
+ 123   2          }
+ 124   1      }
+ 125          
+ 126          
+ 127          //∞¥º¸œÏ”¶≥Ã–Ú£¨≤Œ ˝ «º¸÷µ
+ 128          //∑µªÿº¸÷µ£∫
+ 129          //         7          8    9      10(«Â0)
+ 130          //         4          5    6      11(…æ≥˝)
+ 131          //         1          2    3      12(Œ¥∂®“Â)
+ 132          //         14(Œ¥∂®“Â) 0    15(.)  13(»∑∂®º€∏Ò)
+ 133          
+ 134          void KeyPress()
+ 135          {
+ 136   1        if(ROW1==0)   //»•∆§º¸
+ 137   1        {
+ 138   2          Delay_ms(5);
+ 139   2          if(ROW1==0)
+ 140   2          {
+ 141   3      //      Get_Maopi();
+ 142   3            if(qupi==0)
+ 143   3            qupi=Weight_Shiwu;
+ 144   3            else
+ 145   3            qupi=0;
+ 146   3            Buzzer=0;
+ 147   3            Delay_ms(50);
+ 148   3            Buzzer=1; 
+ 149   3            while(ROW1==0);
+ 150   3          }
+ 151   2        }
+ 152   1        
+ 153   1        if(ROW2==0)    //º”
+ 154   1        {
+ 155   2          Delay_ms(5);
+ 156   2          if(ROW2==0)
+ 157   2          {
+ 158   3            while(!ROW2)
+ 159   3            {
+ 160   4              key_press_num++;
+ 161   4              if(key_press_num>=100)
+ 162   4              {
+ 163   5                key_press_num=0;
+ 164   5                while(!ROW2)
+ 165   5                {
+ 166   6                  if(GapValue<10000)
+ 167   6                  GapValue+=10;
+ 168   6                  Buzzer=0;
+ 169   6                  Delay_ms(10);
+ 170   6                  Buzzer=1;
+ 171   6                  Delay_ms(10);
+ 172   6                  Get_Weight();
+ 173   6                }
+ 174   5              }
+ 175   4              Delay_ms(10);
+ 176   4            }
+ 177   3            if(key_press_num!=0)
+ 178   3            {
+C51 COMPILER V9.60.0.0   MAIN                                                              07/12/2022 09:28:22 PAGE 4   
+
+ 179   4              key_press_num=0;
+ 180   4              if(GapValue<10000)
+ 181   4              GapValue++;
+ 182   4              Buzzer=0;
+ 183   4              Delay_ms(50);
+ 184   4              Buzzer=1;
+ 185   4            }
+ 186   3            write_eeprom();   
+ 187   3          }
+ 188   2        }
+ 189   1      
+ 190   1      
+ 191   1        if(ROW3==0)  //ºı
+ 192   1        {
+ 193   2          Delay_ms(5);
+ 194   2          if(ROW3==0)
+ 195   2          {
+ 196   3            while(!ROW3)
+ 197   3            {
+ 198   4              key_press_num++;
+ 199   4              if(key_press_num>=100)
+ 200   4              {
+ 201   5                key_press_num=0;
+ 202   5                while(!ROW3)
+ 203   5                {
+ 204   6                  if(GapValue>1)
+ 205   6                  GapValue-=10;
+ 206   6                  Buzzer=0;
+ 207   6                  Delay_ms(10);
+ 208   6                  Buzzer=1;
+ 209   6                  Delay_ms(10);
+ 210   6                  Get_Weight();
+ 211   6                }
+ 212   5              }
+ 213   4              Delay_ms(10);
+ 214   4            }
+ 215   3            if(key_press_num!=0)
+ 216   3            {
+ 217   4              key_press_num=0;
+ 218   4              if(GapValue>1)
+ 219   4              GapValue--;
+ 220   4              Buzzer=0;
+ 221   4              Delay_ms(50);
+ 222   4              Buzzer=1;
+ 223   4            }
+ 224   3            write_eeprom();        //±£¥Ê ˝›
+ 225   3          }
+ 226   2        }
+ 227   1      
+ 228   1      }
+ 229          //****************************************************
+ 230          //÷˜∫Ø ˝
+ 231          //****************************************************
+ 232          void main()
+ 233          {
+ 234   1      ////======================
+ 235   1        F_close=0;
+ 236   1        F_open = 0;
+ 237   1        Conveyor_belt = 0;
+ 238   1      //  ROW4=1;
+ 239   1        flag=1;
+ 240   1      ////======================
+C51 COMPILER V9.60.0.0   MAIN                                                              07/12/2022 09:28:22 PAGE 5   
+
+ 241   1      
+ 242   1        init_eeprom();  //ø™ º≥ı ºªØ±£¥Êµƒ ˝æ›
+ 243   1        Init_LCD1602();                 //≥ı ºªØLCD1602
+ 244   1         EA = 0;
+ 245   1         Timer0_Init();
+ 246   1         //≥ı ºªØÕÍ≥…£¨ø™÷–∂œ
+ 247   1         EA = 1;
+ 248   1        
+ 249   1      //  Get_Maopi();
+ 250   1        LCD1602_write_com(0x80);            //÷∏’Î…Ë÷√
+ 251   1         LCD1602_write_word(" Welcome To Use ");  //  
+ 252   1         LCD1602_write_com(0x80+0x40);            //÷∏’Î…Ë÷√
+ 253   1         LCD1602_write_word("Electronic Scale");
+ 254   1      //   Delay_ms(2000);
+ 255   1         Get_Maopi();
+ 256   1         LCD1602_write_com(0x80);           //÷∏’Î…Ë÷√
+ 257   1         LCD1602_write_word("The Weight:     ");
+ 258   1         LCD1602_write_com(0x80+0x40);        //÷∏’Î…Ë÷√
+ 259   1         LCD1602_write_word("         0.000kg");
+ 260   1      //  Get_Maopi();        //≥∆√´∆§÷ÿ¡ø
+ 261   1      
+ 262   1        while(1)
+ 263   1        {
+ 264   2      //√ø0.5√Î≥∆÷ÿ“ª¥Œ
+ 265   2          if (FlagTest==1)
+ 266   2          {
+ 267   3            Get_Weight();
+ 268   3            FlagTest = 0;
+ 269   3      
+ 270   3          }  
+ 271   2          KeyPress();
+ 272   2      
+ 273   2        //=============================
+ 274   2      ////  while()
+ 275   2      ////    if(ROW2==0)
+ 276   2      ////    {
+ 277   2      ///         for(j=1;j<=3;j++)
+ 278   2      ///       {
+ 279   2             if(ROW4==0)
+ 280   2              {
+ 281   3                flag=0;
+ 282   3                F_open=1;
+ 283   3                Delay_ms(3000);
+ 284   3                F_open=0;
+ 285   3              }
+ 286   2                if(Weight_Shiwu+0>=Weight_touwei)//
+ 287   2                  {
+ 288   3                    if(flag==0) 
+ 289   3                      {
+ 290   4                    flag++;
+ 291   4                    F_close=1;
+ 292   4                    Delay_ms(3000);
+ 293   4                    F_close=0;
+ 294   4                    Conveyor_belt = 1;
+ 295   4                    Delay_ms(5000);
+ 296   4                    Conveyor_belt =0;
+ 297   4      //                Delay_ms(3000);
+ 298   4      //                ROW4=0;
+ 299   4                    }
+ 300   3                    
+ 301   3                  }
+ 302   2      
+C51 COMPILER V9.60.0.0   MAIN                                                              07/12/2022 09:28:22 PAGE 6   
+
+ 303   2      ////============================= 
+ 304   2          
+ 305   2        }
+ 306   1      
+ 307   1      
+ 308   1        
+ 309   1        
+ 310   1      }
+ 311          //****************************************************
+ 312          //≥∆÷ÿ
+ 313          //****************************************************
+ 314          void Get_Weight()
+ 315          {
+ 316   1        Weight_Shiwu = HX711_Read();
+ 317   1        Weight_Shiwu = Weight_Shiwu - Weight_Maopi;   //ªÒ»°æª÷ÿ
+ 318   1        
+ 319   1        Weight_Shiwu = (unsigned int)((float)(Weight_Shiwu*10)/GapValue)-qupi;  //º∆À„ µŒÔµƒ µº ÷ÿ¡ø                          
+             -      
+ 320   1        if(Weight_Shiwu >= 10000)   //≥¨÷ÿ±®æØ
+ 321   1        {
+ 322   2          Buzzer = !Buzzer; 
+ 323   2          LED=!LED;
+ 324   2          LCD1602_write_com(0x80+0x40+8);
+ 325   2           LCD1602_write_word("--.---");
+ 326   2        }
+ 327   1        else
+ 328   1        {
+ 329   2          if(Weight_Shiwu==0)
+ 330   2          LED=0;
+ 331   2          else if(Weight_Shiwu>0)
+ 332   2          LED=1; 
+ 333   2          Buzzer = 1;
+ 334   2          Display_Weight();
+ 335   2        }
+ 336   1      }
+ 337          
+ 338          //****************************************************
+ 339          //ªÒ»°√´∆§÷ÿ¡ø
+ 340          //****************************************************
+ 341          void Get_Maopi()
+ 342          {
+ 343   1        unsigned char clear;
+ 344   1      mm: Weight_Maopi_0 = HX711_Read();
+ 345   1        for(clear=0;clear<10;clear++)
+ 346   1        {
+ 347   2          Buzzer=1;
+ 348   2          LED=0;
+ 349   2          Delay_ms(100);
+ 350   2          LED=1;
+ 351   2          Delay_ms(100);  
+ 352   2        }
+ 353   1        Weight_Maopi = HX711_Read();
+ 354   1        if(Weight_Maopi/GapValue!=Weight_Maopi_0/GapValue)
+ 355   1        goto mm;
+ 356   1        Buzzer=0;
+ 357   1        Delay_ms(500);
+ 358   1        Buzzer=1;
+ 359   1      } 
+ 360          
+ 361          //****************************************************
+ 362          //MS—” ±∫Ø ˝(12Mæß’Òœ¬≤‚ ‘)
+ 363          //****************************************************
+C51 COMPILER V9.60.0.0   MAIN                                                              07/12/2022 09:28:22 PAGE 7   
+
+ 364          void Delay_ms(unsigned int n)
+ 365          {
+ 366   1        unsigned int  i,j;
+ 367   1        for(i=0;i<n;i++)
+ 368   1          for(j=0;j<121;j++);
+ 369   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1393    ----
+   CONSTANT SIZE    =     75    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     35       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      3    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
